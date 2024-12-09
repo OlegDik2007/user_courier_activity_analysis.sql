@@ -1,0 +1,36 @@
+SELECT date, paying_users, active_couriers, 
+ROUND(100* paying_users / total_users :: decimal, 2) as paying_users_share, 
+ROUND(100*active_couriers / total_couriers :: decimal , 2) as active_couriers_share
+
+FROM( SELECT time :: date as date, count (DISTINCT user_id) FILter (where action = 'create_order' and order_id  not in ( select order_id from user_actions where action = 'cancel_order') )as paying_users
+
+from user_actions
+group by date) as t1
+
+FULL join
+(select time :: date as date, count (DISTINCT courier_id) filter(where action =' accept_order' and order_id in (select order_id from courier_actions where action = 'deliver_order' ) or action = 'deliver_order') as active_couriers
+from courier_actions
+group by date) t2
+using (date)
+
+FULL JOIN
+     (SELECT date, new_users, new_couriers,
+             SUM (new_users) OVER (ORDER BY date)::int AS total_users,
+             SUM (new_couriers) OVER (ORDER BY date)::int AS total_couriers
+      FROM (SELECT date, COUNT (user_id) as new_users
+            FROM(
+                 SELECT user_id, MIN(time)::DATE as date
+                 FROM user_actions
+                 GROUP BY user_id) t3
+            GROUP BY date) AS t4
+      FULL JOIN
+           (SELECT date, COUNT (courier_id) as new_couriers
+            FROM(
+                 SELECT courier_id, MIN(time)::DATE as date
+                 FROM courier_actions 
+                 GROUP BY courier_id) t5
+            GROUP BY date) AS t6
+       USING (date)
+      )t7
+USING (date)
+ORDER BY date;
